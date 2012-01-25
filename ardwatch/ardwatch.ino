@@ -14,6 +14,7 @@ Arduino-based watch!
  static const int BLANK_INTERVAL = 10000;
  static unsigned long blankCounter = 0;
  static volatile uint8_t int0_awake = 0;
+ static volatile uint8_t vector = 0;
 void setup() 
 { 
   // Set the LED to indicate we're initializing
@@ -47,16 +48,18 @@ void setup()
   digitalWrite(2, HIGH);
   MCUCR &= ~_BV(PUD);
   
+  //cli();
   // interrupt on falling edge
-  EICRA = 2;
+  //EICRA = 2;
   // prevent false alarms
-  PCICR = 0;
-  EIFR |= 3;
+  //PCICR = 0;
+  //EIFR |= 3;
   // Enable interrupt on wake button
-  EIMSK |= _BV(INT0);
-  
+  //EIMSK |= _BV(INT0);
+  //sei();
+
   // Set the watchdog timer in case we crash
-  wdt_enable(WDTO_120MS);
+  //wdt_enable(WDTO_120MS);
   
   // indicate initialization done
   digitalWrite(8, LOW);
@@ -143,12 +146,17 @@ void handleClockTasks() {
     int0_awake = 0;
     meetAndroid.send("wakened by int0");
   }
+  if (vector) {
+    vector = 0;
+    meetAndroid.send("wakened by bad vector");
+  }
 }
 
 void sleepClock() {
   // Don't want the dog barking while we're napping
-  wdt_reset();
-  wdt_disable();
+  //wdt_reset();
+  //wdt_disable();
+  //sei();
   
   meetAndroid.send("going to sleep");
   delay(500);
@@ -156,11 +164,11 @@ void sleepClock() {
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
   blankCounter = 0;
   
-  set_sleep_mode(SLEEP_MODE_PWR_SAVE);
-  sei();
-  sleep_enable();
-  sleep_cpu();
-  sleep_disable();
+  //set_sleep_mode(SLEEP_MODE_EXT_STANDBY);
+  //sei();
+  //sleep_enable();
+  //sleep_cpu();
+  //sleep_disable();
 }
 
 void wakeClock() {
@@ -168,7 +176,7 @@ void wakeClock() {
   blankCounter = millis();
   meetAndroid.send("waking up");
   delay(500);
-  wdt_enable(WDTO_120MS);
+  //wdt_enable(WDTO_120MS);
 }
 
 void setupBlueToothConnection()
@@ -202,5 +210,11 @@ void sendBlueToothCommand(char command[])
 // Interrupt handlers
 ISR(INT0_vect) {
   int0_awake = 1;
+  sei();
+}
+
+ISR(BADISR_vect) {
+  vector = 1;
+  sei();
 }
 
