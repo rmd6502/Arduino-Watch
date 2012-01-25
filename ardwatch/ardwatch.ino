@@ -13,15 +13,20 @@ Arduino-based watch!
  static unsigned long blankCounter = 0;
 void setup() 
 { 
+  // Set the LED to indicate we're initializing
   pinMode(8, OUTPUT);
   digitalWrite(8, HIGH);
+  
+  // temporarily disable the watchdog
   wdt_disable();
-    Wire.begin();
-    SeeedOled.init();
-    
-    Serial.begin(38400); //Set BluetoothFrame BaudRate to default baud rate 38400
-    delay(1000);
-    setupBlueToothConnection();    
+  
+  // Commence system initialization
+  Wire.begin();
+  SeeedOled.init();
+  
+  Serial.begin(38400); //Set BluetoothFrame BaudRate to default baud rate 38400
+  delay(1000);
+  setupBlueToothConnection();    
     
   SeeedOled.clearDisplay();
   SeeedOled.setNormalDisplay();
@@ -33,31 +38,51 @@ void setup()
   meetAndroid.registerFunction(setArdTime, 't');
   meetAndroid.registerFunction(setText, 'x');
   blankCounter = millis();
+  
+  // Set the watchdog timer in case we crash
   wdt_enable(WDTO_120MS);
+  
+  // enable pullup on the wake button so we can read it
   pinMode(2, INPUT);
   digitalWrite(2, HIGH);
   MCUCR &= ~_BV(PUD);
+  
+  // indicate initialization done
   digitalWrite(8, LOW);
 } 
  
 void loop() 
 { 
+  // walk the dog
   wdt_reset();
+  
+  // check for updates from the outside world
   meetAndroid.receive();
+  
+  // handle the inside world
   handleClockTasks();
 } 
- 
+
+// TODO: allow set using formatted string?
 void setArdTime(byte flag, byte numOfValues) {
   setTime(meetAndroid.getLong());
 }
 
+// We got a text!
 void setText(byte flag, byte numOfValues) {
+  
   meetAndroid.send("blankCounter "); 
   meetAndroid.send(blankCounter);
   meetAndroid.sendln();
+  
+  // wake up so the user sees the text message
   if (blankCounter == 0) {
     wakeClock();
   }
+  
+  SeeedOled.setTextXY(1,0);
+  // Clear the text area
+  SeeedOled.putString("                                ");
   SeeedOled.setTextXY(1,0);
   
   int length = meetAndroid.stringLength();
@@ -75,17 +100,22 @@ void setText(byte flag, byte numOfValues) {
 }
 
 void handleClockTasks() {
+  // If we're awake, see if it's time to sleep
   if (blankCounter > 0) {
     if (millis() - blankCounter >= BLANK_INTERVAL) {
       sleepClock();
     }
   }
+  
+  // Extend the wake if the button is down
   if (digitalRead(2) == LOW) {
     digitalWrite(8, HIGH);
     wakeClock();
   } else {
     digitalWrite(8, LOW);
   }
+  
+  // If we're awake, display the time
   if (blankCounter) {
     char tbuf[12];
     
