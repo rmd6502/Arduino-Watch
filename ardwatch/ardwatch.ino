@@ -2,6 +2,8 @@
 Arduino-based watch!
 */
 #include <avr/wdt.h>
+#include <avr/sleep.h>
+#include <avr/interrupt.h>
 #include <MeetAndroid.h>
  #include "Wire.h"
  #include "SeeedOLED.h"
@@ -11,6 +13,7 @@ Arduino-based watch!
  MeetAndroid meetAndroid;
  static const int BLANK_INTERVAL = 10000;
  static unsigned long blankCounter = 0;
+ static volatile uint8_t int0_awake = 0;
 void setup() 
 { 
   // Set the LED to indicate we're initializing
@@ -39,13 +42,21 @@ void setup()
   meetAndroid.registerFunction(setText, 'x');
   blankCounter = millis();
   
-  // Set the watchdog timer in case we crash
-  wdt_enable(WDTO_120MS);
-  
   // enable pullup on the wake button so we can read it
   pinMode(2, INPUT);
   digitalWrite(2, HIGH);
   MCUCR &= ~_BV(PUD);
+  
+  // interrupt on falling edge
+  EICRA = 2;
+  // prevent false alarms
+  PCICR = 0;
+  EIFR |= 3;
+  // Enable interrupt on wake button
+  EIMSK |= _BV(INT0);
+  
+  // Set the watchdog timer in case we crash
+  wdt_enable(WDTO_120MS);
   
   // indicate initialization done
   digitalWrite(8, LOW);
@@ -127,17 +138,36 @@ void handleClockTasks() {
     snprintf(tbuf, 12, "%02d/%02d/%04d", month(), day(), year());
     SeeedOled.putString(tbuf);    
   }
+  
+  if (int0_awake) {
+    int0_awake = 0;
+    meetAndroid.send("wakened by int0");
+  }
 }
 
 void sleepClock() {
-   wdt_disable();
+  // Don't want the dog barking while we're napping
+  wdt_reset();
+  wdt_disable();
+  
+  meetAndroid.send("going to sleep");
+  delay(500);
+  
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
   blankCounter = 0;
+  
+  set_sleep_mode(SLEEP_MODE_PWR_SAVE);
+  sei();
+  sleep_enable();
+  sleep_cpu();
+  sleep_disable();
 }
 
 void wakeClock() {
   SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   blankCounter = millis();
+  meetAndroid.send("waking up");
+  delay(500);
   wdt_enable(WDTO_120MS);
 }
 
@@ -168,3 +198,9 @@ void sendBlueToothCommand(char command[])
     delay(1000);   
     Serial.flush();
 }
+
+// Interrupt handlers
+ISR(INT0_vect) {
+  int0_awake = 1;
+}
+
