@@ -37,7 +37,7 @@ extern "C" {
 void MeetAndroid::processCommand(){
     int functionOffset = buffer[0]-FunctionBufferOffset;
 	if(functionOffset >= 0 && functionOffset < FunctionBufferLenght){
-		void (*H_FuncPtr)(uint8_t, uint8_t) = intFunc[buffer[0]-FunctionBufferOffset];
+		H_voidFuncPtr H_FuncPtr = intFunc[functionOffset];
 		if (H_FuncPtr != 0) {
 			H_FuncPtr(buffer[0], getArrayLength());
 		}
@@ -144,6 +144,17 @@ void MeetAndroid::getString(char string[]){
 		string[a-1] = buffer[a];
 	}
 	string[bufferCount-1] = '\0';
+}
+
+int MeetAndroid::getChar() {
+    if (bufferPtr == bufferCount) return 0;
+    else {
+        int ret;
+        if (bufferPtr > bufferCount) ret = -1;
+        else ret = buffer[bufferPtr];
+        ++bufferPtr;
+        return ret;
+    }
 }
 
 int MeetAndroid::getInt()
@@ -335,4 +346,5 @@ void MeetAndroid::flush(){
 	}
 	bufferCount = 0;
 	numberOfValues = 0;
+    bufferPtr = 1;
 }

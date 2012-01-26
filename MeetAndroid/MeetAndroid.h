@@ -51,8 +51,8 @@ class MeetAndroid : public Print
 
 {
 #define ByteBufferLenght 64
-#define FunctionBufferLenght 75 // 48-122 (in ascii: 0 - z)
-#define FunctionBufferOffset 48  // offset to calc the position in the function buffer ('0' should be stored in intFunc[0])
+#define FunctionBufferOffset 'a'  // offset to calc the position in the function buffer ('0' should be stored in intFunc[0])
+#define FunctionBufferLenght ('z' - FunctionBufferOffset + 1) // 48-122 (in ascii: 0 - z)
 #define _MEET_ANDROID_VERSION 4 // software version of this library
 private:
 	// per object data
@@ -60,6 +60,7 @@ private:
 	uint8_t buffer[ByteBufferLenght];
 	
 	int numberOfValues;
+    int bufferPtr;
 	
 	char abord;
 	char ack;
@@ -92,6 +93,7 @@ public:
 	int stringLength(){return bufferCount;} // string without flag but '/0' at the end
 	void getBuffer(uint8_t[]);
 	
+    int getChar();
 	void getString(char[]);
 	int getInt();
 	long getLong();
