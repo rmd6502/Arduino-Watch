@@ -23,15 +23,18 @@ void setup()
   // Commence system initialization
   Wire.begin();
   SeeedOled.init();
+  SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
   
   Serial.begin(38400); //Set BluetoothFrame BaudRate to default baud rate 38400
   delay(1000);
   setupBlueToothConnection();    
-    
+  
   SeeedOled.clearDisplay();
+  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   SeeedOled.setNormalDisplay();
   SeeedOled.setHorizontalMode();
   SeeedOled.setTextXY(0,0);
+  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   
   //SeeedOled.putString("Hello World!");
   setTime(0, 0, 0, 1, 1, 2012);
@@ -70,33 +73,29 @@ void setArdTime(byte flag, byte numOfValues) {
 
 // We got a text!
 void setText(byte flag, byte numOfValues) {
-  
-  meetAndroid.send("blankCounter "); 
-  meetAndroid.send(blankCounter);
-  meetAndroid.sendln();
-  
   // wake up so the user sees the text message
   if (blankCounter == 0) {
     wakeClock();
   }
   
-  SeeedOled.setTextXY(1,0);
-  // Clear the text area
-  SeeedOled.putString("                                ");
+  for (int jj=0; jj < 2; ++jj) {
+    wdt_reset();
+    SeeedOled.setTextXY(jj+1,0);
+    // Clear the text area
+    for (int ii=0; ii < 16; ++ii) { SeeedOled.putChar(' '); }
+  }
   SeeedOled.setTextXY(1,0);
   
   int length = meetAndroid.stringLength();
-  meetAndroid.send("length "); 
-  meetAndroid.send(length);
-  meetAndroid.sendln();
   
   // define an array with the appropriate size which will store the string
-  char data[length+1];
+  int data;
   
   // tell MeetAndroid to put the string into your prepared array
-  meetAndroid.getString(data);
-  data[31] = 0;
-  SeeedOled.putString(data);
+  while ((data = meetAndroid.getChar()) > 0) {
+    wdt_reset();
+    SeeedOled.putChar(data);
+  }
 }
 
 void handleClockTasks() {
@@ -116,8 +115,10 @@ void handleClockTasks() {
   }
   
   // If we're awake, display the time
-  if (blankCounter) {
-    char tbuf[12];
+  static time_t last_display = 0;
+  if (blankCounter && last_display != now()) {
+    char tbuf[32];
+    last_display = now();
     
     SeeedOled.setTextXY(3,0);
     snprintf(tbuf, 12, "%02d:%02d:%02d", hour(), minute(), second());
@@ -145,7 +146,7 @@ void setupBlueToothConnection()
 {
  
     sendBlueToothCommand("+STWMOD=0");
-    sendBlueToothCommand("+STNA=SeeeduinoBluetooth");
+    sendBlueToothCommand("+STNA=ArdWatch_00001");
     sendBlueToothCommand("+STAUTO=0");
     sendBlueToothCommand("+STOAUT=1");
     sendBlueToothCommand("+STPIN=0000");
@@ -159,7 +160,6 @@ void setupBlueToothConnection()
 //Send the command to Bluetooth Frame
 void sendBlueToothCommand(char command[])
 {
- 
     Serial.println();
     delay(200);
     Serial.print(command);
