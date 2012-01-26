@@ -9,7 +9,8 @@ Arduino-based watch!
  #include "numbers.h"
  
  MeetAndroid meetAndroid;
- static const int BLANK_INTERVAL = 10000;
+ static const int BLANK_INTERVAL_MS = 10000;
+ static const int TEMP_INTERVAL_S = 60;
  static unsigned long blankCounter = 0;
 void setup() 
 { 
@@ -40,10 +41,12 @@ void setup()
   setTime(0, 0, 0, 1, 1, 2012);
   meetAndroid.registerFunction(setArdTime, 't');
   meetAndroid.registerFunction(setText, 'x');
+  meetAndroid.registerFunction(sendBattery, 'b');
+  meetAndroid.registerFunction(sendTemp, 'm');
   blankCounter = millis();
   
   // Set the watchdog timer in case we crash
-  wdt_enable(WDTO_120MS);
+  wdt_enable(WDTO_500MS);
   
   // enable pullup on the wake button so we can read it
   pinMode(2, INPUT);
@@ -78,30 +81,31 @@ void setText(byte flag, byte numOfValues) {
     wakeClock();
   }
   
-  for (int jj=0; jj < 2; ++jj) {
-    wdt_reset();
-    SeeedOled.setTextXY(jj+1,0);
-    // Clear the text area
-    for (int ii=0; ii < 16; ++ii) { SeeedOled.putChar(' '); }
-  }
+  SeeedOled.setTextXY(1,0);
+  // Clear the text area
+  for (int ii=0; ii < 32; ++ii) { SeeedOled.putChar(' '); wdt_reset(); }
+  wdt_reset();
   SeeedOled.setTextXY(1,0);
   
   int length = meetAndroid.stringLength();
   
   // define an array with the appropriate size which will store the string
-  int data;
+  char data[length];
   
   // tell MeetAndroid to put the string into your prepared array
-  while ((data = meetAndroid.getChar()) > 0) {
-    wdt_reset();
-    SeeedOled.putChar(data);
-  }
+  meetAndroid.getString(data);
+  wdt_reset();
+  SeeedOled.putString(data);
+  wdt_reset();
 }
 
 void handleClockTasks() {
+  static long tempReading = 0;
+  static time_t lastTemp = 0;
+  
   // If we're awake, see if it's time to sleep
   if (blankCounter > 0) {
-    if (millis() - blankCounter >= BLANK_INTERVAL) {
+    if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
       sleepClock();
     }
   }
@@ -112,6 +116,11 @@ void handleClockTasks() {
     wakeClock();
   } else {
     digitalWrite(8, LOW);
+  }
+  
+  if (now() - lastTemp >= TEMP_INTERVAL_S) {
+    tempReading = readTemp() / 1000;
+    lastTemp = now();
   }
   
   // If we're awake, display the time
@@ -126,7 +135,11 @@ void handleClockTasks() {
     
     SeeedOled.setTextXY(5,0);
     snprintf(tbuf, 12, "%02d/%02d/%04d", month(), day(), year());
-    SeeedOled.putString(tbuf);    
+    SeeedOled.putString(tbuf);
+    
+    SeeedOled.setTextXY(7,0);
+    snprintf(tbuf, 16, "Temp: %3dC %3dF", tempReading, tempReading * 9/5 + 32);
+    SeeedOled.putString(tbuf);
   }
 }
 
@@ -139,7 +152,7 @@ void sleepClock() {
 void wakeClock() {
   SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   blankCounter = millis();
-  wdt_enable(WDTO_120MS);
+  wdt_enable(WDTO_500MS);
 }
 
 void setupBlueToothConnection()
@@ -167,4 +180,60 @@ void sendBlueToothCommand(char command[])
     Serial.println();
     delay(1000);   
     Serial.flush();
+}
+
+void sendBattery(byte flag, byte numOfValues) {
+  long temp = readVcc();
+  meetAndroid.send(temp);
+
+}
+
+long readVcc() {
+  long result;
+  
+  // Enable the ADC
+  PRR &= ~_BV(0);
+  ADCSRA |= _BV(ADEN);
+  
+  // Read 1.1V reference against AVcc
+  ADMUX = _BV(REFS0) | _BV(MUX3) | _BV(MUX2) | _BV(MUX1);
+  delay(2); // Wait for Vref to settle
+  ADCSRA |= _BV(ADSC); // Convert
+  while (bit_is_set(ADCSRA,ADSC)) wdt_reset();
+  result = ADCL;
+  result |= ADCH<<8;
+  result = 1126400L / result; // Back-calculate AVcc in mV
+  
+  // disable the ADC
+  ADCSRA &= !_BV(ADEN);
+  PRR |= _BV(0);
+  return result;
+}
+
+void sendTemp(byte flag, byte numOfValues) {
+  long temp = readTemp();
+  meetAndroid.send(temp);
+}
+
+long readTemp() {
+  long result;
+  
+  // Enable the ADC
+  PRR &= ~_BV(0);
+  ADCSRA |= _BV(ADEN);
+  
+  // Read temperature sensor against 1.1V reference
+  ADMUX = _BV(REFS1) | _BV(REFS0) | _BV(MUX3);
+  delay(2); // Wait for Vref to settle
+  ADCSRA |= _BV(ADSC); // Convert
+  while (bit_is_set(ADCSRA,ADSC)) wdt_reset();
+  result = ADCL;
+  result |= ADCH<<8;
+  result = (result - 125) * 1075;
+  
+  // disable the ADC
+  ADCSRA &= !_BV(ADEN);
+  PRR |= _BV(0);
+  
+  return result;
 }
