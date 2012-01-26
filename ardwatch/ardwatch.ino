@@ -11,16 +11,15 @@ Arduino-based watch!
 // #include "numbers.h"
  
  MeetAndroid meetAndroid;
- static const int BLANK_INTERVAL_MS = 20000;
- static const int TEMP_INTERVAL_S = 60;
+ static const unsigned int BLANK_INTERVAL_MS = 20000;
+ static const time_t TEMP_INTERVAL_S = 60;
  static unsigned long blankCounter = 0;
  static volatile uint8_t int0_awake = 0;
- static volatile uint8_t vector = 0;
 void setup() 
 { 
   // Set the LED to indicate we're initializing
   pinMode(8, OUTPUT);
-  digitalWrite(8, HIGH);
+  digitalWrite(8, LOW);
   
   Serial.begin(38400); //Set BluetoothFrame BaudRate to default baud rate 38400
   
@@ -30,14 +29,14 @@ void setup()
   // Commence system initialization
   Wire.begin();
   SeeedOled.init();
-  SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
   
   delay(300);
+  SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
     
   setupBlueToothConnection();    
    
   SeeedOled.clearDisplay();
-  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
+//  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   SeeedOled.setNormalDisplay();
   SeeedOled.setHorizontalMode();
   SeeedOled.setTextXY(0,0);
@@ -58,18 +57,18 @@ void setup()
   digitalWrite(2, HIGH);
   MCUCR &= ~_BV(PUD);
   
-  //cli();
+  // Set interrupt on the button press
+  cli();
   // interrupt on falling edge
-  //EICRA = 2;
+  EICRA = 2;
   // prevent false alarms
-  //PCICR = 0;
-  //EIFR |= 3;
+  EIFR |= 3;
   // Enable interrupt on wake button
-  //EIMSK |= _BV(INT0);
-  //sei();
+  EIMSK |= _BV(INT0);
+  sei();
   
-  // indicate initialization done
-  meetAndroid.send("init done");
+  // indicate initialization done    
+  //meetAndroid.send("init done");
   digitalWrite(8, LOW);
 } 
  
@@ -88,7 +87,10 @@ void loop()
 
 // TODO: allow set using formatted string?
 void setArdTime(byte flag, byte numOfValues) {
-  setTime(meetAndroid.getLong());
+  long newTime = meetAndroid.getLong();
+  if (newTime > 0) {
+    setTime(newTime);
+  }
 }
 
 // We got a text!
@@ -104,20 +106,24 @@ void setText(byte flag, byte numOfValues) {
   SeeedOled.setTextXY(1,0);
   
   int length = meetAndroid.stringLength();
+  if (length > 32) {
+    meetAndroid.send("truncating large string");
+    length = 32;
+  }
   
   // define an array with the appropriate size which will store the string
-  char data[length];
+  int data;
   
   // tell MeetAndroid to put the string into your prepared array
-  meetAndroid.getString(data);
-  //wdt_reset();
-  SeeedOled.putString(data);
-  //wdt_reset();
+  while (length-- > 0 && (data = meetAndroid.getChar()) > 0) {
+    wdt_reset();
+    SeeedOled.putChar(data);
+  }
 }
 
 void handleClockTasks() {
   static long tempReading = 0;
-  //static time_t lastTemp = 0;
+  static time_t lastTemp = 0;
   
   // If we're awake, see if it's time to sleep
   if (blankCounter > 0) {
@@ -140,12 +146,10 @@ void handleClockTasks() {
   }
   
   // If we're awake, display the time
-  //static time_t last_display = 0;
+  static time_t last_display = 0;
   if (blankCounter && last_display != now()) {
     char tbuf[32];
     last_display = now();
-    
-    meetAndroid.send("tick");
     
     SeeedOled.setTextXY(3,0);
     snprintf(tbuf, 12, "%02d:%02d:%02d", hour(), minute(), second());
@@ -156,17 +160,13 @@ void handleClockTasks() {
     SeeedOled.putString(tbuf);
     
     SeeedOled.setTextXY(7,0);
-    snprintf(tbuf, 16, "Temp: %3dC %3dF", tempReading, tempReading * 9/5 + 32);
+    snprintf(tbuf, 16, "Temp: %3ldC %3ldF", tempReading, tempReading * 9/5 + 32);
     SeeedOled.putString(tbuf);
   }
   
   if (int0_awake) {
     int0_awake = 0;
     meetAndroid.send("wakened by int0");
-  }
-  if (vector) {
-    vector = 0;
-    meetAndroid.send("wakened by bad vector");
   }
 }
 
@@ -175,24 +175,24 @@ void sleepClock() {
   wdt_reset();
   wdt_disable();
   
-  meetAndroid.send("going to sleep");
+  meetAndroid.send(">sleep");
   delay(100);
     
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
   blankCounter = 0;
   
-  //set_sleep_mode(SLEEP_MODE_EXT_STANDBY);
-  //sei();
-  //sleep_enable();
-  //sleep_cpu();
-  //sleep_disable();
+  set_sleep_mode(SLEEP_MODE_EXT_STANDBY);
+  sei();
+  sleep_enable();
+  sleep_cpu();
+  sleep_disable();
 }
 
 void wakeClock() {
   wdt_disable();
+  sei();
   SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   blankCounter = millis();
-  meetAndroid.send("waking up");
   delay(100);
   //wdt_enable(WDTO_500MS);
 }
@@ -225,17 +225,12 @@ void sendBlueToothCommand(char command[])
 // Interrupt handlers
 ISR(INT0_vect) {
   int0_awake = 1;
+  sei();
 }
-
-ISR(BADISR_vect) {
-  vector = 1;
-}
-
 
 void sendBattery(byte flag, byte numOfValues) {
   long temp = readVcc();
   meetAndroid.send(temp);
-
 }
 
 long readVcc() {
@@ -287,3 +282,4 @@ long readTemp() {
   
   return result;
 }
+

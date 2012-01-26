@@ -181,7 +181,7 @@ void SeeedOLED::clearDisplay()
   {	
     setTextXY(j,0);    
     {
-      for(i=0;i<128;i++)  //clear all columns
+      for(i=0;i<16;i++)  //clear all columns
       {
         putChar(' ');    
       }
