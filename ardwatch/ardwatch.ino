@@ -11,10 +11,13 @@ Arduino-based watch!
 // #include "numbers.h"
  
  MeetAndroid meetAndroid;
- static const unsigned int BLANK_INTERVAL_MS = 20000;
+ static const unsigned int BLANK_INTERVAL_MS = 10000;
  static const time_t TEMP_INTERVAL_S = 60;
  static unsigned long blankCounter = 0;
  static volatile uint8_t int0_awake = 0;
+ static volatile uint8_t pcint2_awake = 0;
+ 
+ #define WATCHDOG_INTERVAL (WDTO_500MS)
 void setup() 
 { 
   // Set the LED to indicate we're initializing
@@ -30,10 +33,11 @@ void setup()
   Wire.begin();
   SeeedOled.init();
   
-  delay(300);
+  delay(100);
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
-    
-  setupBlueToothConnection();    
+  digitalWrite(8, HIGH);
+  
+  setupBlueToothConnection();   
    
   SeeedOled.clearDisplay();
 //  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
@@ -65,10 +69,15 @@ void setup()
   EIFR |= 3;
   // Enable interrupt on wake button
   EIMSK |= _BV(INT0);
+  
+  // set up pcint2 for changes to rxd
+  PCIFR |= _BV(PCIF2);
+  PCMSK2 |= _BV(PCINT16);
   sei();
   
   // indicate initialization done    
   //meetAndroid.send("init done");
+  wdt_enable(WATCHDOG_INTERVAL);
   digitalWrite(8, LOW);
 } 
  
@@ -156,7 +165,7 @@ void handleClockTasks() {
     SeeedOled.putString(tbuf);
     
     SeeedOled.setTextXY(5,0);
-    snprintf(tbuf, 12, "%02d/%02d/%04d", month(), day(), year());
+    snprintf(tbuf, 16, "%02d/%02d/%04d %.3s", month(), day(), year(), dayShortStr(day()));
     SeeedOled.putString(tbuf);
     
     SeeedOled.setTextXY(7,0);
@@ -167,6 +176,10 @@ void handleClockTasks() {
   if (int0_awake) {
     int0_awake = 0;
     meetAndroid.send("wakened by int0");
+  }
+  if (pcint2_awake) {
+    pcint2_awake = 0;
+    meetAndroid.send("wakened by pcint2");
   }
 }
 
@@ -181,11 +194,25 @@ void sleepClock() {
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
   blankCounter = 0;
   
-  set_sleep_mode(SLEEP_MODE_EXT_STANDBY);
+//    #define SLEEP_MODE_IDLE         (0)
+//    #define SLEEP_MODE_ADC          _BV(SM0)
+//    #define SLEEP_MODE_PWR_DOWN     _BV(SM1)
+//    #define SLEEP_MODE_PWR_SAVE     (_BV(SM0) | _BV(SM1))
+//    #define SLEEP_MODE_STANDBY      (_BV(SM1) | _BV(SM2))
+//    #define SLEEP_MODE_EXT_STANDBY  (_BV(SM0) | _BV(SM1) | _BV(SM2))
+  
+  cli();
+  PCIFR |= _BV(PCIF2);
+  PCICR |= _BV(PCIE2);
+  
+  set_sleep_mode(SLEEP_MODE_PWR_SAVE);
   sei();
   sleep_enable();
   sleep_cpu();
   sleep_disable();
+  
+  PCICR &= ~_BV(PCIE2);
+  meetAndroid.send("Wake");
 }
 
 void wakeClock() {
@@ -194,18 +221,18 @@ void wakeClock() {
   SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   blankCounter = millis();
   delay(100);
-  //wdt_enable(WDTO_500MS);
+  wdt_enable(WATCHDOG_INTERVAL);
 }
 
 void setupBlueToothConnection()
 {
-    sendBlueToothCommand("+STWMOD=0");
-    sendBlueToothCommand("+STNA=ArdWatch_00001");
-    sendBlueToothCommand("+STAUTO=0");
-    sendBlueToothCommand("+STOAUT=1");
-    sendBlueToothCommand("+STPIN=0000");
+    sendBlueToothCommand((char *)"+STWMOD=0");
+    sendBlueToothCommand((char *)"+STNA=ArdWatch_00001");
+    sendBlueToothCommand((char *)"+STAUTO=0");
+    sendBlueToothCommand((char *)"+STOAUT=1");
+    sendBlueToothCommand((char *)"+STPIN=0000");
     delay(3000); // This delay is required.
-    sendBlueToothCommand("+INQ=1");
+    sendBlueToothCommand((char *)"+INQ=1");
     delay(3000); // This delay is required.
 }
  
@@ -226,6 +253,10 @@ void sendBlueToothCommand(char command[])
 ISR(INT0_vect) {
   int0_awake = 1;
   sei();
+}
+
+ISR(PCINT2_vect) {
+  pcint2_awake = 1;
 }
 
 void sendBattery(byte flag, byte numOfValues) {
@@ -250,7 +281,7 @@ long readVcc() {
   result = 1126400L / result; // Back-calculate AVcc in mV
   
   // disable the ADC
-  ADCSRA &= !_BV(ADEN);
+  ADCSRA &= ~_BV(ADEN);
   PRR |= _BV(0);
   return result;
 }
@@ -277,7 +308,7 @@ long readTemp() {
   result = (result - 125) * 1075;
   
   // disable the ADC
-  ADCSRA &= !_BV(ADEN);
+  ADCSRA &= ~_BV(ADEN);
   PRR |= _BV(0);
   
   return result;
