@@ -20,6 +20,9 @@ Arduino-based watch!
  #define WATCHDOG_INTERVAL (WDTO_500MS)
 void setup() 
 { 
+  // TODO: detect brownout and keep processor shut down with BOD disabled
+  // we'll need to let it wake when charge power is applied, hook !CHG to INT1
+  
   // Set the LED to indicate we're initializing
   pinMode(8, OUTPUT);
   digitalWrite(8, LOW);
