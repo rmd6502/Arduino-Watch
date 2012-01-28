@@ -208,7 +208,9 @@ void sleepClock() {
   set_sleep_mode(SLEEP_MODE_PWR_SAVE);
   sei();
   sleep_enable();
-  sleep_cpu();
+  while (int0_awake == 0 && pcint2_awake == 0) {
+    sleep_cpu();
+  }
   sleep_disable();
   
   PCICR &= ~_BV(PCIE2);
