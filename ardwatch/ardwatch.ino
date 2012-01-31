@@ -17,6 +17,10 @@ Arduino-based watch!
  static volatile uint8_t int0_awake = 0;
  static volatile uint8_t pcint2_awake = 0;
  
+ static const uint8_t display_shdn = 6;
+ static const uint8_t button = 2;
+ static const uint8_t led = 8;
+ 
 #define WATCHDOG_INTERVAL (WDTO_500MS)
 
 void setup() 
@@ -25,8 +29,8 @@ void setup()
   // we'll need to let it wake when charge power is applied, hook !CHG to INT1
   
   // Set the LED to indicate we're initializing
-  pinMode(8, OUTPUT);
-  digitalWrite(8, LOW);
+  pinMode(led, OUTPUT);
+  digitalWrite(led, LOW);
   
   Serial.begin(38400); //Set BluetoothFrame BaudRate to default baud rate 38400
   
@@ -36,14 +40,14 @@ void setup()
   // Commence system initialization
   Wire.begin();
   SeeedOled.init();
-  digitalWrite(8, HIGH);
+  digitalWrite(led, HIGH);
   
   delay(100);
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
-  digitalWrite(8, LOW);
+  digitalWrite(led, LOW);
   
   setupBlueToothConnection();   
-  digitalWrite(8, HIGH);
+  digitalWrite(led, HIGH);
    
   SeeedOled.clearDisplay();
 //  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
@@ -63,8 +67,8 @@ void setup()
   blankCounter = millis();
   
   // enable pullup on the wake button so we can read it
-  pinMode(2, INPUT);
-  digitalWrite(2, HIGH);
+  pinMode(button, INPUT);
+  digitalWrite(button, HIGH);
   MCUCR &= ~_BV(PUD);
   
   // Set interrupt on the button press
@@ -76,15 +80,19 @@ void setup()
   // Enable interrupt on wake button
   EIMSK |= _BV(INT0);
   
-  // set up pcint2 for changes to rxd
+  // set up pcint2 for changes to rxd and the button
   PCIFR |= _BV(PCIF2);
   PCMSK2 |= _BV(PCINT16) | _BV(PCINT18);
   sei();
   
+  // Set up shutdown for display boost converter
+  digitalWrite(display_shdn, HIGH);
+  pinMode(display_shdn, OUTPUT);
+  
   // indicate initialization done    
   //meetAndroid.send("init done");
   wdt_enable(WATCHDOG_INTERVAL);
-  digitalWrite(8, LOW);
+  digitalWrite(led, LOW);
 } 
  
 void loop() 
@@ -146,11 +154,11 @@ void handleClockTasks() {
   }
   
   // Extend the wake if the button is down
-  if (digitalRead(2) == LOW) {
-    digitalWrite(8, HIGH);
+  if (digitalRead(button) == LOW) {
+    digitalWrite(led, HIGH);
     wakeClock();
   } else {
-    digitalWrite(8, LOW);
+    digitalWrite(led, LOW);
   }
   
   if (now() - lastTemp >= TEMP_INTERVAL_S) {
@@ -196,6 +204,8 @@ void sleepClock() {
   delay(100);
     
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
+  digitalWrite(display_shdn, HIGH);
+  
   blankCounter = 0;
   
 //    #define SLEEP_MODE_IDLE         (0)
@@ -209,6 +219,7 @@ void sleepClock() {
   PCIFR |= _BV(PCIF2);
   PCICR |= _BV(PCIE2);
   
+  // turns off everything but timer2 asynch mode
   set_sleep_mode(SLEEP_MODE_PWR_SAVE);
   sei();
   sleep_enable();
@@ -224,6 +235,7 @@ void sleepClock() {
 void wakeClock() {
   wdt_disable();
   sei();
+  digitalWrite(display_shdn, HIGH);
   SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   blankCounter = millis();
   delay(100);
