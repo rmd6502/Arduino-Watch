@@ -17,7 +17,8 @@ Arduino-based watch!
  static volatile uint8_t int0_awake = 0;
  static volatile uint8_t pcint2_awake = 0;
  
- #define WATCHDOG_INTERVAL (WDTO_500MS)
+#define WATCHDOG_INTERVAL (WDTO_500MS)
+
 void setup() 
 { 
   // TODO: detect brownout and keep processor shut down with BOD disabled
@@ -35,12 +36,14 @@ void setup()
   // Commence system initialization
   Wire.begin();
   SeeedOled.init();
+  digitalWrite(8, HIGH);
   
   delay(100);
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
-  digitalWrite(8, HIGH);
+  digitalWrite(8, LOW);
   
   setupBlueToothConnection();   
+  digitalWrite(8, HIGH);
    
   SeeedOled.clearDisplay();
 //  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
@@ -67,7 +70,7 @@ void setup()
   // Set interrupt on the button press
   cli();
   // interrupt on falling edge
-  EICRA = 2;
+  EICRA = 1;
   // prevent false alarms
   EIFR |= 3;
   // Enable interrupt on wake button
@@ -75,7 +78,7 @@ void setup()
   
   // set up pcint2 for changes to rxd
   PCIFR |= _BV(PCIF2);
-  PCMSK2 |= _BV(PCINT16);
+  PCMSK2 |= _BV(PCINT16) | _BV(PCINT18);
   sei();
   
   // indicate initialization done    
@@ -257,7 +260,6 @@ void sendBlueToothCommand(char command[])
 // Interrupt handlers
 ISR(INT0_vect) {
   int0_awake = 1;
-  sei();
 }
 
 ISR(PCINT2_vect) {
