@@ -141,10 +141,8 @@ void handleClockTasks() {
   static time_t lastTemp = 0;
   
   // If we're awake, see if it's time to sleep
-  if (blankCounter > 0) {
-    if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
-      sleepClock();
-    }
+  if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
+    sleepClock();
   }
   
   // Extend the wake if the button is down
