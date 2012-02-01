@@ -8,12 +8,15 @@ Arduino-based watch!
 #include "Wire.h"
 #include "SeeedOLED.h"
 #include <Time.h>
+#include "requestbuf.h"
 // #include "numbers.h"
  
  MeetAndroid meetAndroid;
- static const unsigned int BLANK_INTERVAL_MS = 10000;
+ static const unsigned long BLANK_INTERVAL_MS = 10000;
  static const time_t TEMP_INTERVAL_S = 60;
+ static const time_t BUTTON_TIME_MS = 2000;
  static unsigned long blankCounter = 0;
+ static unsigned long buttonCounter = 0;
  static volatile uint8_t int0_awake = 0;
  static volatile uint8_t pcint2_awake = 0;
  
@@ -21,8 +24,11 @@ Arduino-based watch!
  static const uint8_t button = 2;
  static const uint8_t led = 8;
  
- enum BTState (BT_INIT, BT_WAITREPLY, BT_IDLE, BT_INQ, BT_CONN);
- BTState currentState = BT_INIT;
+ enum BTState { BT_INIT = 0, BT_READY, BT_INQ, BT_CONNECTING, BT_CONNECTED };
+ BTState btState = BT_INIT;
+ 
+ enum ProgState { PS_INITIALIZING, PS_WAITREPLY, PS_NOT_CONNECTED, PS_CONNECTED, PS_DISCONNECTED };
+ ProgState currentState = PS_INITIALIZING;
  
 #define WATCHDOG_INTERVAL (WDTO_500MS)
 
@@ -56,9 +62,7 @@ void setup()
   SeeedOled.setTextXY(3,4);
   SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   
-  SeeedOled.putString("Initializing...");
-  
-  setupBlueToothConnection();   
+  //SeeedOled.putString("Initializing...");
   digitalWrite(led, HIGH);
   
   setTime(0, 0, 0, 1, 1, 2012);
@@ -68,7 +72,7 @@ void setup()
   meetAndroid.registerFunction(sendBattery, 'b');
   meetAndroid.registerFunction(sendTemp, 'm');
   
-  blankCounter = millis();
+  blankCounter = 0;
   
   // enable pullup on the wake button so we can read it
   pinMode(button, INPUT);
@@ -77,13 +81,6 @@ void setup()
   
   // Set interrupt on the button press
   cli();
-  // interrupt on falling edge
-  EICRA = 1;
-  // prevent false alarms
-  EIFR |= 3;
-  // Enable interrupt on wake button
-  EIMSK |= _BV(INT0);
-  
   // set up pcint2 for changes to rxd and the button
   PCIFR |= _BV(PCIF2);
   PCMSK2 |= _BV(PCINT16) | _BV(PCINT18);
@@ -97,6 +94,8 @@ void setup()
   //meetAndroid.send("init done");
   wdt_enable(WATCHDOG_INTERVAL);
   digitalWrite(led, LOW);
+  
+  Serial.println("init");
 } 
  
 void loop() 
@@ -104,7 +103,7 @@ void loop()
   // walk the dog
   wdt_reset();
   
-  if (currentState == BT_CONN) {
+  if (currentState == PS_CONNECTED) {
     // check for updates from the outside world
     meetAndroid.receive();
   } else {
@@ -157,15 +156,24 @@ void handleClockTasks() {
   static time_t lastTemp = 0;
   
   // If we're awake, see if it's time to sleep
-  if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
+  if (currentState > PS_WAITREPLY && millis() - blankCounter >= BLANK_INTERVAL_MS) {
     sleepClock();
   }
   
   // Extend the wake if the button is down
   if (digitalRead(button) == LOW) {
     digitalWrite(led, HIGH);
+    if (buttonCounter == 0) {
+      buttonCounter = millis();
+    } else {
+      if (millis() - buttonCounter >= BUTTON_TIME_MS) {
+        currentState = PS_NOT_CONNECTED;
+        buttonCounter = 0xffffffff;
+      }
+    }
     wakeClock();
   } else {
+    buttonCounter = 0;
     digitalWrite(led, LOW);
   }
   
@@ -195,11 +203,11 @@ void handleClockTasks() {
   
   if (int0_awake) {
     int0_awake = 0;
-    meetAndroid.send("wakened by int0");
+    meetAndroid.send("wint0");
   }
   if (pcint2_awake) {
     pcint2_awake = 0;
-    meetAndroid.send("wakened by pcint2");
+    meetAndroid.send("wint2");
   }
 }
 
@@ -208,7 +216,7 @@ void sleepClock() {
   wdt_reset();
   wdt_disable();
   
-  meetAndroid.send(">sleep");
+  meetAndroid.send(">sl");
   delay(100);
     
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
@@ -253,28 +261,47 @@ void wakeClock() {
 void handleBluetoothInit()
 {
   switch(currentState) {
-    case BT_INIT:
+    case PS_INITIALIZING:
       setupBluetoothConnection();
       break;
-    case BT_WAITREPLY:
-    case BT_INQ:
+    case PS_WAITREPLY:
       checkBluetoothReply();
       break;
-    case BT_IDLE:
+    case PS_NOT_CONNECTED:
       connectBluetooth();
+      break;
+    default:
       break;
   }
 }
 
+RequestBuf<16> btReplyBuffer;
 void checkBluetoothReply() {
-  static char buf[16];
-  static int bufptr = 0;
+  while (Serial.available()) {
+    btReplyBuffer.append(Serial.read());
+  }
+  const char *p = strcasestr(btReplyBuffer, "+BTSTA:");
+  // do we have the full reply?
+  if (p && strchr(p, '\r')) {
+    btState = (BTState)atoi(p+7);
+    switch (btState) {
+      case BT_INIT: case BT_READY:    
+        currentState = PS_INITIALIZING;
+        break;
+      case BT_INQ: case BT_CONNECTING:
+        currentState = PS_NOT_CONNECTED;
+        break;
+      case BT_CONNECTED:
+        currentState = PS_CONNECTED;
+        break;
+    }
+  }
 }
 
-static int btState = 0;
+static int btStep = 0;
 void setupBluetoothConnection()
 {
-  switch(btState) {
+  switch(btStep) {
     case 0:sendBlueToothCommand((char *)"+STWMOD=0");break;
     case 1:sendBlueToothCommand((char *)"+STNA=ArdWatch_00001");break;
     case 2:sendBlueToothCommand((char *)"+STAUTO=0");break;
@@ -282,18 +309,19 @@ void setupBluetoothConnection()
     case 4:sendBlueToothCommand((char *)"+STPIN=0000");break;
     default:break;
   }
-  if (btState < 5) {
-    ++btState;
-    currentState = BT_WAITREPLY;
+  if (btStep < 5) {
+    btReplyBuffer.clearBuf();
+    ++btStep;
+    currentState = PS_WAITREPLY;
   } else {
-    currentState = BT_IDLE;
+    currentState = PS_NOT_CONNECTED;
   }
 }
 
 void connectBluetooth()
 {
     sendBlueToothCommand((char *)"+INQ=1");
-    currentState = BT_INQ;
+    currentState = PS_WAITREPLY;
 }
  
  
@@ -308,12 +336,11 @@ void sendBlueToothCommand(char command[])
 }
 
 // Interrupt handlers
-ISR(INT0_vect) {
-  int0_awake = 1;
-}
-
 ISR(PCINT2_vect) {
   pcint2_awake = 1;
+  if (!digitalRead(button)) {
+    int0_awake = 1;
+  }
 }
 
 void sendBattery(byte flag, byte numOfValues) {
