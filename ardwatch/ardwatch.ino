@@ -21,6 +21,9 @@ Arduino-based watch!
  static const uint8_t button = 2;
  static const uint8_t led = 8;
  
+ enum BTState (BT_INIT, BT_WAITREPLY, BT_IDLE, BT_INQ, BT_CONN);
+ BTState currentState = BT_INIT;
+ 
 #define WATCHDOG_INTERVAL (WDTO_500MS)
 
 void setup() 
@@ -45,18 +48,19 @@ void setup()
   delay(100);
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
   digitalWrite(led, LOW);
+   
+  SeeedOled.clearDisplay();
+  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
+  SeeedOled.setNormalDisplay();
+  SeeedOled.setHorizontalMode();
+  SeeedOled.setTextXY(3,4);
+  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
+  
+  SeeedOled.putString("Initializing...");
   
   setupBlueToothConnection();   
   digitalWrite(led, HIGH);
-   
-  SeeedOled.clearDisplay();
-//  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
-  SeeedOled.setNormalDisplay();
-  SeeedOled.setHorizontalMode();
-  SeeedOled.setTextXY(0,0);
-  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
-    
-  //SeeedOled.putString("Hello World!");
+  
   setTime(0, 0, 0, 1, 1, 2012);
   meetAndroid.flush();
   meetAndroid.registerFunction(setArdTime, 't');
@@ -100,8 +104,12 @@ void loop()
   // walk the dog
   wdt_reset();
   
-  // check for updates from the outside world
-  meetAndroid.receive();
+  if (currentState == BT_CONN) {
+    // check for updates from the outside world
+    meetAndroid.receive();
+  } else {
+    handleBluetoothInit();
+  }
   
   /* wdt_reset */;
   // handle the inside world
@@ -242,16 +250,50 @@ void wakeClock() {
   wdt_enable(WATCHDOG_INTERVAL);
 }
 
-void setupBlueToothConnection()
+void handleBluetoothInit()
 {
-    sendBlueToothCommand((char *)"+STWMOD=0");
-    sendBlueToothCommand((char *)"+STNA=ArdWatch_00001");
-    sendBlueToothCommand((char *)"+STAUTO=0");
-    sendBlueToothCommand((char *)"+STOAUT=1");
-    sendBlueToothCommand((char *)"+STPIN=0000");
-    delay(3000); // This delay is required.
+  switch(currentState) {
+    case BT_INIT:
+      setupBluetoothConnection();
+      break;
+    case BT_WAITREPLY:
+    case BT_INQ:
+      checkBluetoothReply();
+      break;
+    case BT_IDLE:
+      connectBluetooth();
+      break;
+  }
+}
+
+void checkBluetoothReply() {
+  static char buf[16];
+  static int bufptr = 0;
+}
+
+static int btState = 0;
+void setupBluetoothConnection()
+{
+  switch(btState) {
+    case 0:sendBlueToothCommand((char *)"+STWMOD=0");break;
+    case 1:sendBlueToothCommand((char *)"+STNA=ArdWatch_00001");break;
+    case 2:sendBlueToothCommand((char *)"+STAUTO=0");break;
+    case 3:sendBlueToothCommand((char *)"+STOAUT=1");break;
+    case 4:sendBlueToothCommand((char *)"+STPIN=0000");break;
+    default:break;
+  }
+  if (btState < 5) {
+    ++btState;
+    currentState = BT_WAITREPLY;
+  } else {
+    currentState = BT_IDLE;
+  }
+}
+
+void connectBluetooth()
+{
     sendBlueToothCommand((char *)"+INQ=1");
-    delay(3000); // This delay is required.
+    currentState = BT_INQ;
 }
  
  
@@ -262,9 +304,7 @@ void sendBlueToothCommand(char command[])
     delay(200);
     Serial.print(command);
     delay(200);
-    Serial.println();
-    delay(1000);   
-    Serial.flush();
+    Serial.println(); 
 }
 
 // Interrupt handlers
