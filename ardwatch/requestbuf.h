@@ -18,5 +18,13 @@ class RequestBuf {
   char& operator[](size_t pos) { if (pos >= 0 && pos < SZ) return requestbuf[pos]; else return b; }
   operator char *() { return requestbuf; }
   operator const char *() const { return requestbuf; }
+  void advance(const char *p) { 
+    size_t dif = p - requestbuf;
+    if (dif < SZ) {
+      memmove(requestbuf, p, requestpos - dif);
+      requestpos -= dif;
+      requestbuf[requestpos] = 0;
+    }
+  }
 };
 

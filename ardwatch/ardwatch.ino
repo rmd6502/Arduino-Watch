@@ -62,7 +62,7 @@ void setup()
   SeeedOled.setTextXY(3,4);
   SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   
-  //SeeedOled.putString("Initializing...");
+  SeeedOled.putString("Initializing...");
   digitalWrite(led, HIGH);
   
   setTime(0, 0, 0, 1, 1, 2012);
@@ -155,8 +155,13 @@ void handleClockTasks() {
   static long tempReading = 0;
   static time_t lastTemp = 0;
   
+  // Nothing to do until we're initialized
+  if (currentState <= PS_WAITREPLY) {
+    return;
+  }
+  
   // If we're awake, see if it's time to sleep
-  if (currentState > PS_WAITREPLY && millis() - blankCounter >= BLANK_INTERVAL_MS) {
+  if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
     sleepClock();
   }
   
@@ -166,7 +171,7 @@ void handleClockTasks() {
     if (buttonCounter == 0) {
       buttonCounter = millis();
     } else {
-      if (millis() - buttonCounter >= BUTTON_TIME_MS) {
+      if (buttonCounter != 0xffffffff && millis() - buttonCounter >= BUTTON_TIME_MS) {
         currentState = PS_NOT_CONNECTED;
         buttonCounter = 0xffffffff;
       }
@@ -189,7 +194,7 @@ void handleClockTasks() {
     last_display = now();
     
     SeeedOled.setTextXY(3,0);
-    snprintf(tbuf, 12, "%02d:%02d:%02d", hour(), minute(), second());
+    snprintf(tbuf, 16, "%02d:%02d:%02d        ", hour(), minute(), second());
     SeeedOled.putString(tbuf);
     
     SeeedOled.setTextXY(5,0);
@@ -277,16 +282,30 @@ void handleBluetoothInit()
 
 RequestBuf<16> btReplyBuffer;
 void checkBluetoothReply() {
-  while (Serial.available()) {
+  while (Serial.available() && btReplyBuffer.pos() < btReplyBuffer.size()) {
     btReplyBuffer.append(Serial.read());
   }
   const char *p = strcasestr(btReplyBuffer, "+BTSTA:");
+  const char *q = strchr(p, '\r');
+
   // do we have the full reply?
-  if (p && strchr(p, '\r')) {
-    btState = (BTState)atoi(p+7);
-    switch (btState) {
-      case BT_INIT: case BT_READY:    
-        currentState = PS_INITIALIZING;
+  if (p && q) {
+    int newBtState = (BTState)atoi(p+7);
+    switch (newBtState) {
+      case BT_INIT:
+        if (btState == BT_INQ || btState == BT_CONNECTING) {
+          currentState = PS_DISCONNECTED;
+        } else {  
+          // still need to wait for the ready
+          currentState = PS_WAITREPLY;
+        }
+        break;
+      case BT_READY:
+        if (btState == BT_INQ || btState == BT_CONNECTING) {
+          currentState = PS_DISCONNECTED;
+        } else { 
+          currentState = PS_INITIALIZING;
+        }
         break;
       case BT_INQ: case BT_CONNECTING:
         currentState = PS_NOT_CONNECTED;
@@ -294,6 +313,15 @@ void checkBluetoothReply() {
       case BT_CONNECTED:
         currentState = PS_CONNECTED;
         break;
+    }
+    btState = newBtState;
+    btReplyBuffer.advance(q);
+  } else {
+    p = strchr(btReplyBuffer, '+');
+    if (p && btReplyBuffer.pos() - (p - btReplyBuffer) < 7) {
+      btReplyBuffer.advance(p);
+    } else {
+      btReplyBuffer.clearBuf();
     }
   }
 }
