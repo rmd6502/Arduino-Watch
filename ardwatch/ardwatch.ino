@@ -158,7 +158,7 @@ void setText(byte flag, byte numOfValues) {
     wdt_reset();
     SeeedOled.putChar(data);
   }
-  while (ii-- < 32) { SeeedOled.putChar(' '); wdt_reset(); }
+  while (ii++ < 32) { SeeedOled.putChar(' '); wdt_reset(); }
 }
 
 void handleClockTasks() {
@@ -189,7 +189,7 @@ void handleClockTasks() {
     digitalWrite(led, LOW);
   }
 
-  if (buzzCounter && millis() - buzzCounter > BUZZ_INTERVAL_MS) {
+  if (millis() - buzzCounter >= BUZZ_INTERVAL_MS) {
     digitalWrite(motor_l, LOW);
     buzzCounter = 0;
   }
