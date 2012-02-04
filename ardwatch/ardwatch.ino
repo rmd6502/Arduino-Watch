@@ -13,10 +13,12 @@ Arduino-based watch!
  
  MeetAndroid meetAndroid;
  static const unsigned long BLANK_INTERVAL_MS = 10000;
+ static const unsigned long BUZZ_INTERVAL_MS = 500;
  static const time_t TEMP_INTERVAL_S = 60;
  static const time_t BUTTON_TIME_MS = 2000;
  static unsigned long blankCounter = 0;
  static unsigned long buttonCounter = 0;
+  static unsigned long buzzCounter = 0;
  static volatile uint8_t int0_awake = 0;
  static volatile uint8_t pcint2_awake = 0;
  
@@ -44,7 +46,8 @@ void setup()
   // Set the LED to indicate we're initializing
   pinMode(led, OUTPUT);
   digitalWrite(led, LOW);
-  byte sr = MCUSR;
+  
+  pinMode(motor_l, OUTPUT);
   
   Serial.begin(38400); //Set BluetoothFrame BaudRate to default baud rate 38400
   
@@ -70,7 +73,6 @@ void setup()
   //SeeedOled.putString("Init...");
   //digitalWrite(led, HIGH);
   
-  SeeedOled.putNumber(sr);
   setTime(0, 0, 0, 1, 1, 2012);
   meetAndroid.flush();
   meetAndroid.registerFunction(setArdTime, 't');
@@ -132,8 +134,12 @@ void setText(byte flag, byte numOfValues) {
   // wake up so the user sees the text message
   if (blankCounter == 0) {
     wakeClock();
+  } else {
+    meetAndroid.send(blankCounter);
   }
   blankCounter = millis();
+  buzzCounter = millis();
+  digitalWrite(motor_l, HIGH);
   
   SeeedOled.setTextXY(1,0);
   // Clear the text area
@@ -190,6 +196,10 @@ void handleClockTasks() {
     sleepClock();
   }
   
+  if (buzzCounter && millis() - buzzCounter > BUZZ_INTERVAL_MS) {
+    digitalWrite(motor_l, LOW);
+    buzzCounter = 0;
+  }
   if (now() - lastTemp >= TEMP_INTERVAL_S) {
     tempReading = readTemp() / 1000;
     lastTemp = now();
@@ -237,6 +247,7 @@ void sleepClock() {
   //pinMode(display_shdn, OUTPUT);
   
   blankCounter = 0;
+  buzzCounter = 0;
   
 //    #define SLEEP_MODE_IDLE         (0)
 //    #define SLEEP_MODE_ADC          _BV(SM0)
