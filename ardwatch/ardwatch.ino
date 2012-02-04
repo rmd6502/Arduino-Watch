@@ -23,12 +23,16 @@ Arduino-based watch!
  static const uint8_t display_shdn = 6;
  static const uint8_t button = 2;
  static const uint8_t led = 8;
+ static const uint8_t motor_l = 5;
  
  enum BTState { BT_INIT = 0, BT_READY, BT_INQ, BT_CONNECTING, BT_CONNECTED };
  BTState btState = BT_INIT;
  
  enum ProgState { PS_INITIALIZING, PS_WAITREPLY, PS_NOT_CONNECTED, PS_CONNECTED, PS_DISCONNECTED };
  ProgState currentState = PS_INITIALIZING;
+ 
+ enum RespState { RS_NONE, RS_PLUS, RS_B, RS_T1, RS_S, RS_T2, RS_A, RS_T3, RS_E, RS_COL };
+ RespState respState = RS_NONE;
  
 #define WATCHDOG_INTERVAL (WDTO_500MS)
 
@@ -40,6 +44,7 @@ void setup()
   // Set the LED to indicate we're initializing
   pinMode(led, OUTPUT);
   digitalWrite(led, LOW);
+  byte sr = MCUSR;
   
   Serial.begin(38400); //Set BluetoothFrame BaudRate to default baud rate 38400
   
@@ -49,22 +54,23 @@ void setup()
   // Commence system initialization
   Wire.begin();
   SeeedOled.init();
-  digitalWrite(led, HIGH);
+  //digitalWrite(led, HIGH);
   
-  delay(100);
-  SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
-  digitalWrite(led, LOW);
+//  delay(100);
+//  SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
+  //digitalWrite(led, LOW);
    
   SeeedOled.clearDisplay();
-  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
+  //SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   SeeedOled.setNormalDisplay();
   SeeedOled.setHorizontalMode();
-  SeeedOled.setTextXY(3,4);
-  SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
+  //SeeedOled.setTextXY(3,4);
+  //SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   
-  SeeedOled.putString("Initializing...");
-  digitalWrite(led, HIGH);
+  //SeeedOled.putString("Init...");
+  //digitalWrite(led, HIGH);
   
+  SeeedOled.putNumber(sr);
   setTime(0, 0, 0, 1, 1, 2012);
   meetAndroid.flush();
   meetAndroid.registerFunction(setArdTime, 't');
@@ -87,15 +93,13 @@ void setup()
   sei();
   
   // Set up shutdown for display boost converter
-  digitalWrite(display_shdn, HIGH);
-  pinMode(display_shdn, OUTPUT);
+  digitalWrite(display_shdn, LOW);
+  pinMode(display_shdn, INPUT);
   
   // indicate initialization done    
   //meetAndroid.send("init done");
   wdt_enable(WATCHDOG_INTERVAL);
   digitalWrite(led, LOW);
-  
-  Serial.println("init");
 } 
  
 void loop() 
@@ -129,6 +133,7 @@ void setText(byte flag, byte numOfValues) {
   if (blankCounter == 0) {
     wakeClock();
   }
+  blankCounter = millis();
   
   SeeedOled.setTextXY(1,0);
   // Clear the text area
@@ -137,7 +142,7 @@ void setText(byte flag, byte numOfValues) {
   
   int length = meetAndroid.stringLength();
   if (length > 32) {
-    meetAndroid.send("truncating large string");
+    meetAndroid.send("trunc");
     length = 32;
   }
   
@@ -160,26 +165,29 @@ void handleClockTasks() {
     return;
   }
   
-  // If we're awake, see if it's time to sleep
-  if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
-    sleepClock();
-  }
-  
   // Extend the wake if the button is down
   if (digitalRead(button) == LOW) {
     digitalWrite(led, HIGH);
-    if (buttonCounter == 0) {
-      buttonCounter = millis();
-    } else {
-      if (buttonCounter != 0xffffffff && millis() - buttonCounter >= BUTTON_TIME_MS) {
-        currentState = PS_NOT_CONNECTED;
-        buttonCounter = 0xffffffff;
-      }
-    }
-    wakeClock();
+//    if (buttonCounter == 0) {
+//          meetAndroid.send('b');
+//      buttonCounter = millis();
+//    } else {
+//          meetAndroid.send('B');
+//      if (buttonCounter != 0xffffffff && millis() - buttonCounter >= BUTTON_TIME_MS) {
+//        currentState = PS_NOT_CONNECTED;
+//        buttonCounter = 0xffffffff;
+//      }
+//    }
+    if (blankCounter == 0)
+      wakeClock();
   } else {
-    buttonCounter = 0;
+    //buttonCounter = 0;
     digitalWrite(led, LOW);
+  }
+  
+    // If we're awake, see if it's time to sleep
+  if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
+    sleepClock();
   }
   
   if (now() - lastTemp >= TEMP_INTERVAL_S) {
@@ -200,10 +208,11 @@ void handleClockTasks() {
     SeeedOled.setTextXY(5,0);
     snprintf(tbuf, 16, "%02d/%02d/%04d %.3s", month(), day(), year(), dayShortStr(day()));
     SeeedOled.putString(tbuf);
-    
+        
     SeeedOled.setTextXY(7,0);
     snprintf(tbuf, 16, "Temp: %3ldC %3ldF", tempReading, tempReading * 9/5 + 32);
     SeeedOled.putString(tbuf);
+    wdt_reset();
   }
   
   if (int0_awake) {
@@ -225,7 +234,7 @@ void sleepClock() {
   delay(100);
     
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
-  digitalWrite(display_shdn, HIGH);
+  //pinMode(display_shdn, OUTPUT);
   
   blankCounter = 0;
   
@@ -250,17 +259,17 @@ void sleepClock() {
   sleep_disable();
   
   PCICR &= ~_BV(PCIE2);
-  meetAndroid.send("Wake");
 }
 
 void wakeClock() {
   wdt_disable();
   sei();
-  digitalWrite(display_shdn, HIGH);
+  //pinMode(display_shdn, INPUT);
   SeeedOled.sendCommand(SeeedOLED_Display_On_Cmd);
   blankCounter = millis();
-  delay(100);
+  wdt_reset();
   wdt_enable(WATCHDOG_INTERVAL);
+  wdt_reset();
 }
 
 void handleBluetoothInit()
@@ -280,48 +289,90 @@ void handleBluetoothInit()
   }
 }
 
-RequestBuf<16> btReplyBuffer;
 void checkBluetoothReply() {
-  while (Serial.available() && btReplyBuffer.pos() < btReplyBuffer.size()) {
-    btReplyBuffer.append(Serial.read());
-  }
-  const char *p = strcasestr(btReplyBuffer, "+BTSTA:");
-  const char *q = strchr(p, '\r');
-
-  // do we have the full reply?
-  if (p && q) {
-    int newBtState = (BTState)atoi(p+7);
-    switch (newBtState) {
-      case BT_INIT:
-        if (btState == BT_INQ || btState == BT_CONNECTING) {
-          currentState = PS_DISCONNECTED;
-        } else {  
-          // still need to wait for the ready
-          currentState = PS_WAITREPLY;
-        }
+  byte b = 0;
+  while (Serial.available()) {
+    wdt_reset();
+    b = tolower(Serial.read());
+    if (b == '+') {
+      respState = RS_PLUS;
+      continue;
+    }
+    
+    //    RS_NONE, RS_PLUS, RS_B, RS_T1, RS_S, RS_T2, RS_A, RS_COL
+    switch(respState) {
+      default:
         break;
-      case BT_READY:
-        if (btState == BT_INQ || btState == BT_CONNECTING) {
-          currentState = PS_DISCONNECTED;
-        } else { 
-          currentState = PS_INITIALIZING;
-        }
+      case RS_PLUS:
+        if (b == 'b') respState = RS_B;
+        else { respState = RS_NONE;}
         break;
-      case BT_INQ: case BT_CONNECTING:
-        currentState = PS_NOT_CONNECTED;
+     case RS_B:
+        if (b == 't') respState = RS_T1;
+        else { respState = RS_NONE; }
         break;
-      case BT_CONNECTED:
-        currentState = PS_CONNECTED;
+     case RS_T1:
+        if (b == 's') respState = RS_S;
+        else { respState = RS_NONE; }
+        break;
+     case RS_S:
+        if (b == 't') respState = RS_T2;
+        else { respState = RS_NONE; }
+        break;
+     case RS_T2:
+        if (b == 'a') respState = RS_A;
+        else { respState = RS_NONE; }
+        break;
+     case RS_A:
+        if (b == 't') respState = RS_T3;
+        else { respState = RS_NONE; }
+        break;
+     case RS_T3:
+        if (b == 'e') respState = RS_E;
+        else { respState = RS_NONE; }
+        break;
+     case RS_E:
+        if (b == ':') respState = RS_COL;
+        else { respState = RS_NONE; }
+        break;
+     case RS_COL:
+        if (b < '0' || b > '9') respState = RS_NONE;
         break;
     }
-    btState = newBtState;
-    btReplyBuffer.advance(q);
-  } else {
-    p = strchr(btReplyBuffer, '+');
-    if (p && btReplyBuffer.pos() - (p - btReplyBuffer) < 7) {
-      btReplyBuffer.advance(p);
-    } else {
-      btReplyBuffer.clearBuf();
+    // do we have the full reply?
+    if (respState == RS_COL) {
+      int newBtState = b - '0';
+      switch (newBtState) {
+        case BT_INIT:
+          if (btState == BT_INQ || btState == BT_CONNECTING) {
+            currentState = PS_DISCONNECTED;
+          } else {  
+            // still need to wait for the ready
+            currentState = PS_WAITREPLY;
+          }
+          break;
+        case BT_READY:
+          if (btState == BT_INQ || btState == BT_CONNECTING) {
+            currentState = PS_DISCONNECTED;
+          } else { 
+            currentState = PS_INITIALIZING;
+          }
+          break;
+        case BT_INQ:
+          SeeedOled.putChar('Q');
+          currentState = PS_WAITREPLY;
+          break;
+        case BT_CONNECTING:
+          SeeedOled.putChar('N');
+          currentState = PS_WAITREPLY;
+          break;
+        case BT_CONNECTED:
+          SeeedOled.putChar('C');
+          currentState = PS_CONNECTED;
+          blankCounter = millis();
+          break;
+      }
+      btState = (BTState)newBtState;
     }
   }
 }
@@ -329,6 +380,7 @@ void checkBluetoothReply() {
 static int btStep = 0;
 void setupBluetoothConnection()
 {
+  SeeedOled.putNumber(btStep);
   switch(btStep) {
     case 0:sendBlueToothCommand((char *)"+STWMOD=0");break;
     case 1:sendBlueToothCommand((char *)"+STNA=ArdWatch_00001");break;
@@ -338,8 +390,8 @@ void setupBluetoothConnection()
     default:break;
   }
   if (btStep < 5) {
-    btReplyBuffer.clearBuf();
     ++btStep;
+    respState = RS_NONE;
     currentState = PS_WAITREPLY;
   } else {
     currentState = PS_NOT_CONNECTED;
@@ -356,11 +408,9 @@ void connectBluetooth()
 //Send the command to Bluetooth Frame
 void sendBlueToothCommand(char command[])
 {
-    Serial.println();
-    delay(200);
+    Serial.print("\r\n");
     Serial.print(command);
-    delay(200);
-    Serial.println(); 
+    Serial.print("\r\n"); 
 }
 
 // Interrupt handlers
