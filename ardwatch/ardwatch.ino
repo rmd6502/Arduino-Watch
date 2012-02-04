@@ -50,7 +50,7 @@ void setup()
   pinMode(motor_l, OUTPUT);
   
   Serial.begin(38400); //Set BluetoothFrame BaudRate to default baud rate 38400
-  
+  initTime();
   // temporarily disable the watchdog
   wdt_disable();
   
