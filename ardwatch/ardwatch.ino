@@ -17,8 +17,8 @@ Arduino-based watch!
  static const time_t TEMP_INTERVAL_S = 60;
  static const time_t BUTTON_TIME_MS = 2000;
  static unsigned long blankCounter = 0;
- static unsigned long buttonCounter = 0;
-  static unsigned long buzzCounter = 0;
+ //static unsigned long buttonCounter = 0;
+ static unsigned long buzzCounter = 0;
  static volatile uint8_t int0_awake = 0;
  static volatile uint8_t pcint2_awake = 0;
  
@@ -78,7 +78,7 @@ void setup()
   meetAndroid.registerFunction(setArdTime, 't');
   meetAndroid.registerFunction(setText, 'x');
   meetAndroid.registerFunction(sendBattery, 'b');
-  meetAndroid.registerFunction(sendTemp, 'm');
+
   
   blankCounter = 0;
   
@@ -101,7 +101,7 @@ void setup()
   // indicate initialization done    
   //meetAndroid.send("init done");
   wdt_enable(WATCHDOG_INTERVAL);
-  digitalWrite(led, LOW);
+  //digitalWrite(led, LOW);
 } 
  
 void loop() 
@@ -142,15 +142,13 @@ void setText(byte flag, byte numOfValues) {
   digitalWrite(motor_l, HIGH);
   
   SeeedOled.setTextXY(1,0);
-  // Clear the text area
-  for (int ii=0; ii < 32; ++ii) { SeeedOled.putChar(' ');  wdt_reset(); }
-  SeeedOled.setTextXY(1,0);
   
   int length = meetAndroid.stringLength();
   if (length > 32) {
     meetAndroid.send("trunc");
     length = 32;
   }
+  int ii = length;
   
   // define an array with the appropriate size which will store the string
   int data;
@@ -160,11 +158,11 @@ void setText(byte flag, byte numOfValues) {
     wdt_reset();
     SeeedOled.putChar(data);
   }
+  while (ii-- < 32) { SeeedOled.putChar(' '); wdt_reset(); }
 }
 
 void handleClockTasks() {
   static long tempReading = 0;
-  static time_t lastTemp = 0;
   
   // Nothing to do until we're initialized
   if (currentState <= PS_WAITREPLY) {
@@ -190,19 +188,15 @@ void handleClockTasks() {
     //buttonCounter = 0;
     digitalWrite(led, LOW);
   }
-  
-    // If we're awake, see if it's time to sleep
-  if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
-    sleepClock();
-  }
-  
+
   if (buzzCounter && millis() - buzzCounter > BUZZ_INTERVAL_MS) {
     digitalWrite(motor_l, LOW);
     buzzCounter = 0;
   }
-  if (now() - lastTemp >= TEMP_INTERVAL_S) {
-    tempReading = readTemp() / 1000;
-    lastTemp = now();
+  
+  // If we're awake, see if it's time to sleep
+  if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
+    sleepClock();
   }
   
   // If we're awake, display the time
@@ -219,19 +213,16 @@ void handleClockTasks() {
     snprintf(tbuf, 16, "%02d/%02d/%04d %.3s", month(), day(), year(), dayShortStr(day()));
     SeeedOled.putString(tbuf);
         
-    SeeedOled.setTextXY(7,0);
-    snprintf(tbuf, 16, "Temp: %3ldC %3ldF", tempReading, tempReading * 9/5 + 32);
-    SeeedOled.putString(tbuf);
     wdt_reset();
   }
   
   if (int0_awake) {
     int0_awake = 0;
-    meetAndroid.send("wint0");
+    meetAndroid.send("w0");
   }
   if (pcint2_awake) {
     pcint2_awake = 0;
-    meetAndroid.send("wint2");
+    meetAndroid.send("w2");
   }
 }
 
@@ -459,31 +450,4 @@ long readVcc() {
   return result;
 }
 
-void sendTemp(byte flag, byte numOfValues) {
-  long temp = readTemp();
-  meetAndroid.send(temp);
-}
-
-long readTemp() {
-  long result;
-  
-  // Enable the ADC
-  PRR &= ~_BV(0);
-  ADCSRA |= _BV(ADEN);
-  
-  // Read temperature sensor against 1.1V reference
-  ADMUX = _BV(REFS1) | _BV(REFS0) | _BV(MUX3);
-  delay(2); // Wait for Vref to settle
-  ADCSRA |= _BV(ADSC); // Convert
-  while (bit_is_set(ADCSRA,ADSC)) wdt_reset();
-  result = ADCL;
-  result |= ADCH<<8;
-  result = (result - 125) * 1075;
-  
-  // disable the ADC
-  ADCSRA &= ~_BV(ADEN);
-  PRR |= _BV(0);
-  
-  return result;
-}
 
