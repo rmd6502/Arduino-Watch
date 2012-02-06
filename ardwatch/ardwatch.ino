@@ -11,7 +11,9 @@ Arduino-based watch!
 #include "requestbuf.h"
 // #include "numbers.h"
  
- MeetAndroid meetAndroid;
+ void recheckConnection(uint8_t, uint8_t);
+ MeetAndroid meetAndroid(recheckConnection);
+ 
  static const unsigned long BLANK_INTERVAL_MS = 10000;
  static const unsigned long BUZZ_INTERVAL_MS = 500;
  static const time_t TEMP_INTERVAL_S = 60;
@@ -78,7 +80,7 @@ void setup()
   meetAndroid.registerFunction(setArdTime, 't');
   meetAndroid.registerFunction(setText, 'x');
   //meetAndroid.registerFunction(sendBattery, 'b');
-  meetAndroid.registerFunction(recheckConnection, '+');
+  //meetAndroid.registerFunction(recheckConnection, '+');
 
   blankCounter = 0;
   
@@ -455,7 +457,16 @@ long readVcc() {
   return result;
 }
 #endif
-void recheckConnection(uint8_t, uint8_t) {
+void recheckConnection(uint8_t c, uint8_t l) {
+  if (c != '+' || l > 14) return;
+  char statBuf[14];
+  meetAndroid.getString(statBuf);
+  if (!strncasecmp(statBuf, "btstate:", 8)) {
+    btState = (BTState)(statBuf[8]-'0');
+    if (currentState == PS_CONNECTED && btState < BT_CONNECTED) {
+      currentState = PS_DISCONNECTED;
+    }
+  }
 }
 
 

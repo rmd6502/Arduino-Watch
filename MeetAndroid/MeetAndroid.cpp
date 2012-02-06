@@ -109,7 +109,7 @@ bool MeetAndroid::receive(){
 			if(lastByte == abord){
 				flush();
 			}
-			else if(lastByte == ack){
+			else if(lastByte == ack || lastByte == '\r'){
 				processCommand();
 				flush();
 			}
