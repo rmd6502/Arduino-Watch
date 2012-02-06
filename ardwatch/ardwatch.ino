@@ -77,9 +77,9 @@ void setup()
   meetAndroid.flush();
   meetAndroid.registerFunction(setArdTime, 't');
   meetAndroid.registerFunction(setText, 'x');
-  meetAndroid.registerFunction(sendBattery, 'b');
+  //meetAndroid.registerFunction(sendBattery, 'b');
+  meetAndroid.registerFunction(recheckConnection, '+');
 
-  
   blankCounter = 0;
   
   // enable pullup on the wake button so we can read it
@@ -162,8 +162,6 @@ void setText(byte flag, byte numOfValues) {
 }
 
 void handleClockTasks() {
-  static long tempReading = 0;
-  
   // Nothing to do until we're initialized
   if (currentState <= PS_WAITREPLY) {
     return;
@@ -182,8 +180,14 @@ void handleClockTasks() {
 //        buttonCounter = 0xffffffff;
 //      }
 //    }
-    if (blankCounter == 0)
+    if (blankCounter == 0) {
       wakeClock();
+    } else {
+      blankCounter = millis();
+    }
+    if (currentState == PS_DISCONNECTED || currentState == PS_NOT_CONNECTED) {
+        connectBluetooth();
+    }
   } else {
     //buttonCounter = 0;
     digitalWrite(led, LOW);
@@ -423,6 +427,7 @@ ISR(PCINT2_vect) {
   }
 }
 
+#if 0
 void sendBattery(byte flag, byte numOfValues) {
   long temp = readVcc();
   meetAndroid.send(temp);
@@ -448,6 +453,9 @@ long readVcc() {
   ADCSRA &= ~_BV(ADEN);
   PRR |= _BV(0);
   return result;
+}
+#endif
+void recheckConnection(uint8_t, uint8_t) {
 }
 
 

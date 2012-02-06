@@ -293,11 +293,14 @@ void initTime() {
 	TCNT2 = 0;
 	OCR2A = 32;
 
-	// set CTC mode, clear PWM modes
-	TCCR2A = _BV(WGM21);
+	// set fast pwm mode
+	TCCR2A = _BV(WGM21) | _BV(WGM20);
 
 	// no prescaler, start clock
-	TCCR2B = _BV(CS20);
+	TCCR2B = _BV(CS20) | _BV(WGM22);
+
+	// Wait for registers to be set
+	while (ASSR & (_BV(TCN2UB) | _BV(OCR2AUB) | _BV(TCR2AUB) | _BV(TCR2BUB))) ;
 
 	// enable interrupt on compare match
 	TIFR2 |= _BV(OCF2A);
