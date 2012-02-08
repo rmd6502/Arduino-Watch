@@ -291,21 +291,25 @@ void initTime() {
 	ASSR |= _BV(AS2);
 
 	TCNT2 = 0;
-	OCR2A = 32;
+	OCR2A = 7;
 
 	// set CTC mode, clear PWM modes
-	TCCR2A = _BV(WGM21);
+	//TCCR2A = _BV(WGM21);
+	TCCR2A = _BV(WGM20) | _BV(WGM21) ;
 
-	// no prescaler, start clock
-	TCCR2B = _BV(CS20);
+	// x1024 prescaler, start clock
+	TCCR2B = _BV(CS20) | _BV(CS21) | _BV(CS22)| _BV(WGM22);
 
 	// enable interrupt on compare match
-	TIFR2 |= _BV(OCF2A);
-	TIMSK2 |= _BV(OCIE2A);
+	//TIFR2 |= _BV(OCF2A);
+	//TIMSK2 |= _BV(OCIE2A);
+	TIFR2 |= _BV(TOV2);
+	TIMSK2 |= _BV(TOIE2);
 
 	// set up variables
-	remainder = 768;
 	milliCount = 0;
+
+    while (ASSR & (_BV(TCN2UB) | _BV(OCR2AUB) | _BV(TCR2AUB) | _BV(TCR2BUB))) ;
 
 	sei();
 }
@@ -314,13 +318,10 @@ time_t myMillis() {
 	return milliCount;
 }
 
-ISR(TIMER2_COMPA_vect) {
-	++milliCount;
-	remainder += 768;
-	if (remainder >= 1000) {
-		remainder -= 1000;
-		OCR2A = 33;
-	} else {
-		OCR2A = 32;
-	}
+void resetMillis() {
+    milliCount = 0;
+}
+
+ISR(TIMER2_OVF_vect) {
+	milliCount += 250;
 }
