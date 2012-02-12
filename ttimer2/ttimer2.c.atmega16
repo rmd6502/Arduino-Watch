@@ -1,0 +1,66 @@
+#include <avr/io.h>
+#include <avr/sleep.h>
+#include <avr/interrupt.h>
+#include <avr/wdt.h>
+
+static volatile unsigned long milliCount = 0;
+static volatile uint16_t remainder;
+
+void initTime();
+
+void  setup(void) {
+    milliCount = 0;
+    remainder = 0;
+	wdt_disable();
+
+    initTime();
+
+    set_sleep_mode(SLEEP_MODE_PWR_SAVE);
+    sei();
+    sleep_enable();
+    while (1) {
+      sleep_cpu();
+    }
+    sleep_disable();
+
+	return 0;
+}
+
+void initTime() {
+    cli();
+
+    // stop timer2 for now
+    TCCR2  = 0;
+
+    // Enable asynchronous mode
+    TIMSK = 0;
+    ASSR |= _BV(AS2);
+
+    TCNT2 = 0;
+    OCR2 = 32;
+
+    // set fast pwm mode
+    // no prescaler, start clock
+    TCCR2 = _BV(WGM21) | _BV(WGM20) | _BV(CS20);
+
+    // enable interrupt on compare match
+    TIFR |= _BV(OCF2);
+    TIMSK |= _BV(OCIE2);
+
+    // set up variables
+    remainder = 768;
+    milliCount = 0;
+
+    sei();
+}
+
+ISR(TIMER2_COMP_vect) {
+    ++milliCount;
+    remainder += 768;
+    if (remainder >= 1000) {
+        remainder -= 1000;
+        OCR2 = 33;
+    } else {
+        OCR2 = 32;
+    }
+}
