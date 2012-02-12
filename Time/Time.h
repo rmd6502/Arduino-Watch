@@ -125,6 +125,7 @@ time_t makeTime(tmElements_t &tm);  // convert time elements into time_t
 // since millis() won't work with deep sleep
 void initTime();
 time_t myMillis();
+void resetMillis();
 
 
 #endif /* _Time_h */
