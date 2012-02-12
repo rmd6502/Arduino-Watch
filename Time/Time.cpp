@@ -47,6 +47,12 @@ int hour() { // the hour now
   return hour(now()); 
 }
 
+int hourFormat12() { // the hour now 
+  int ret = hour(now());
+  if (ret > 12) ret -=12;
+  return ret;
+}
+
 int hour(time_t t) { // the hour for the given time
   refreshCache(t);
   return tm.Hour;  
@@ -63,6 +69,10 @@ int minute(time_t t) { // the minute for the given time
 
 int second() {
   return second(now()); 
+}
+
+uint8_t isAM() {
+	return hour() < 12;
 }
 
 int second(time_t t) {  // the second for the given time
@@ -281,6 +291,7 @@ void setSyncInterval(time_t interval){ // set the number of seconds between re-s
 static volatile unsigned long milliCount = 0;
 static volatile uint16_t remainder;
 void initTime() {
+	setTime(0);
 	cli();
 
 	// stop timer2 for now
