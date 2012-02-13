@@ -304,8 +304,7 @@ void initTime() {
 	TCNT2 = 0;
 	OCR2A = 7;
 
-	// set CTC mode, clear PWM modes
-	//TCCR2A = _BV(WGM21);
+	// set Fast PWM mode
 	TCCR2A = _BV(WGM20) | _BV(WGM21) ;
 
 	// x1024 prescaler, start clock
@@ -318,6 +317,7 @@ void initTime() {
 	// set up variables
 	milliCount = 0;
 
+    // Wait for registers to settle
     while (ASSR & (_BV(TCN2UB) | _BV(OCR2AUB) | _BV(TCR2AUB) | _BV(TCR2BUB))) ;
 
 	sei();
