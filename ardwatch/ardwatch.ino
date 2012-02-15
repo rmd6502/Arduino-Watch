@@ -219,7 +219,7 @@ void handleClockTasks() {
     SeeedOled.putString(tbuf);
     
     SeeedOled.setTextXY(5,0);
-    snprintf(tbuf, 16, "%02d/%02d/%04d %.3s", month(), day(), year(), dayShortStr(day()));
+    snprintf(tbuf, 16, "%02d/%02d/%04d %.3s", month(), day(), year(), dayShortStr(weekday()));
     SeeedOled.putString(tbuf);
         
     wdt_reset();
