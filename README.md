@@ -1,5 +1,5 @@
 Arduino based watch.  Currently uses Seeedstudio's film series - OLED shield + bluetooth shield
-![watch picture](/Arduino-Watch/watch_image.jpg)
+![watch picture](https://github.com/rmd6502/Arduino-Watch/blob/master/watch_image.jpg?raw=true)
 
 Manifest
 ========
