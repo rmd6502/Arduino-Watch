@@ -13,6 +13,16 @@ Arduino-based watch!
  
  void recheckConnection(uint8_t, uint8_t);
  MeetAndroid meetAndroid(recheckConnection);
+ void setArdTime(byte flag, byte numOfValues);
+ void setText(byte flag, byte numOfValues);
+ void handleBluetoothInit();
+ void handleClockTasks();
+ void wakeClock();
+ void connectBluetooth();
+ void sleepClock();
+ void setupBluetoothConnection();
+ void checkBluetoothReply();
+ void sendBlueToothCommand(char command[]);
  
  static const unsigned long BLANK_INTERVAL_MS = 10000;
  static const unsigned long BUZZ_INTERVAL_MS = 500;
