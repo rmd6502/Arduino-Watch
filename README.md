@@ -7,9 +7,9 @@ Manifest
 MeetAndroid - modified version of MeetAndroid.  See amarino-toolkit.net
 
 There are two commands recognized right now:
-  * t(10-digit unix time)^S - set the time and date.  You can use _expr `date +"%s"` - 3600 \* 5_ to generate the date for your locale (update the
+** t(10-digit unix time)^S - set the time and date.  You can use _expr `date +"%s"` - 3600 \* 5_ to generate the date for your locale (update the
  number of seconds subtracted for your time zone).
-  * x(message)^S - send message to the watch.  It will vibrate the motor for .5 sec
+** x(message)^S - send message to the watch.  It will vibrate the motor for .5 sec
 
 Time        - Modified version of the Time library to work with a 32kHz crystal to keep time
 
