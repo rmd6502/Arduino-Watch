@@ -16,12 +16,12 @@ Arduino-based watch!
  
  static const unsigned long BLANK_INTERVAL_MS = 10000;
  static const unsigned long BUZZ_INTERVAL_MS = 500;
- static const time_t TEMP_INTERVAL_S = 60;
- static const time_t BUTTON_TIME_MS = 2000;
+ //static const time_t TEMP_INTERVAL_S = 60;
+ //static const time_t BUTTON_TIME_MS = 2000;
  static unsigned long blankCounter = 0;
  //static unsigned long buttonCounter = 0;
  static unsigned long buzzCounter = 0;
- static volatile uint8_t int0_awake = 0;
+ //static volatile uint8_t int0_awake = 0;
  static volatile uint8_t pcint2_awake = 0;
  
  static const uint8_t display_shdn = 6;
@@ -125,10 +125,13 @@ void loop()
 
 // TODO: allow set using formatted string?
 void setArdTime(byte flag, byte numOfValues) {
+  wdt_disable();
   long newTime = meetAndroid.getLong();
   if (newTime > 0) {
     setTime(newTime);
   }
+  wdt_reset();
+  wdt_enable(WATCHDOG_INTERVAL);
 }
 
 // We got a text!
@@ -212,7 +215,7 @@ void handleClockTasks() {
     last_display = now();
     
     SeeedOled.setTextXY(3,0);
-    snprintf(tbuf, 16, "%02d:%02d:%02d        ", hour(), minute(), second());
+    snprintf(tbuf, 16, "%02d:%02d:%02d ", hour(), minute(), second());
     SeeedOled.putString(tbuf);
     
     SeeedOled.setTextXY(5,0);
@@ -222,13 +225,13 @@ void handleClockTasks() {
     wdt_reset();
   }
   
-  if (int0_awake) {
-    int0_awake = 0;
-    meetAndroid.send("w0");
-  }
+//  if (int0_awake) {
+//    int0_awake = 0;
+//    meetAndroid.send("w0");
+//  }
   if (pcint2_awake) {
     pcint2_awake = 0;
-    meetAndroid.send("w2");
+    //meetAndroid.send("w2");
   }
 }
 
@@ -237,8 +240,8 @@ void sleepClock() {
   wdt_reset();
   wdt_disable();
   
-  meetAndroid.send(">sl");
-  delay(100);
+//  meetAndroid.send(">sl");
+//  delay(100);
     
   SeeedOled.sendCommand(SeeedOLED_Display_Off_Cmd);
   //pinMode(display_shdn, OUTPUT);
@@ -261,7 +264,7 @@ void sleepClock() {
   set_sleep_mode(SLEEP_MODE_PWR_SAVE);
   sei();
   sleep_enable();
-  while (int0_awake == 0 && pcint2_awake == 0) {
+  while (/* int0_awake == 0 && */pcint2_awake == 0) {
     sleep_cpu();
   }
   sleep_disable();
@@ -302,6 +305,7 @@ void checkBluetoothReply() {
   while (Serial.available()) {
     wdt_reset();
     b = tolower(Serial.read());
+    //SeeedOled.putChar(b);
     if (b == '+') {
       respState = RS_PLUS;
       continue;
@@ -365,6 +369,7 @@ void checkBluetoothReply() {
           } else { 
             currentState = PS_INITIALIZING;
           }
+          delay(30);
           break;
         case BT_INQ:
           SeeedOled.putChar('Q');
@@ -378,6 +383,8 @@ void checkBluetoothReply() {
           SeeedOled.putChar('C');
           currentState = PS_CONNECTED;
           blankCounter = millis();
+          SeeedOled.setTextXY(0,0);
+          SeeedOled.putString("          ");
           break;
       }
       btState = (BTState)newBtState;
@@ -391,7 +398,7 @@ void setupBluetoothConnection()
   SeeedOled.putNumber(btStep);
   switch(btStep) {
     case 0:sendBlueToothCommand((char *)"+STWMOD=0");break;
-    case 1:sendBlueToothCommand((char *)"+STNA=ArdWatch_00001");break;
+    case 1:sendBlueToothCommand((char *)"+STNA=ArdWatch_00003");break;
     case 2:sendBlueToothCommand((char *)"+STAUTO=0");break;
     case 3:sendBlueToothCommand((char *)"+STOAUT=1");break;
     case 4:sendBlueToothCommand((char *)"+STPIN=0000");break;
@@ -424,9 +431,9 @@ void sendBlueToothCommand(char command[])
 // Interrupt handlers
 ISR(PCINT2_vect) {
   pcint2_awake = 1;
-  if (!digitalRead(button)) {
-    int0_awake = 1;
-  }
+//  if (!digitalRead(button)) {
+//    int0_awake = 1;
+//  }
 }
 
 #if 0
