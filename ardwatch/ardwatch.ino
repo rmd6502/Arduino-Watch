@@ -275,6 +275,7 @@ void sleepClock() {
   sei();
   sleep_enable();
   while (/* int0_awake == 0 && */pcint2_awake == 0) {
+    delayMicroseconds(32);
     sleep_cpu();
   }
   sleep_disable();
