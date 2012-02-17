@@ -149,9 +149,7 @@ void setText(byte flag, byte numOfValues) {
   // wake up so the user sees the text message
   if (blankCounter == 0) {
     wakeClock();
-  } else {
-    meetAndroid.send(blankCounter);
-  }
+  } 
   blankCounter = millis();
   buzzCounter = millis();
   digitalWrite(motor_l, HIGH);
@@ -445,6 +443,9 @@ ISR(PCINT2_vect) {
 //  if (!digitalRead(button)) {
 //    int0_awake = 1;
 //  }
+}
+
+ISR(BADISR_vect) {
 }
 
 #if 0
