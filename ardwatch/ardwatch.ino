@@ -18,11 +18,11 @@ Arduino-based watch!
  static const unsigned long BUZZ_INTERVAL_MS = 500;
  //static const time_t TEMP_INTERVAL_S = 60;
  //static const time_t BUTTON_TIME_MS = 2000;
- static unsigned long blankCounter = 0;
+ static unsigned long blankCounter;
  //static unsigned long buttonCounter = 0;
- static unsigned long buzzCounter = 0;
+ static unsigned long buzzCounter;
  //static volatile uint8_t int0_awake = 0;
- static volatile uint8_t pcint2_awake = 0;
+ static volatile uint8_t pcint2_awake;
  
  static const uint8_t display_shdn = 6;
  static const uint8_t button = 2;
