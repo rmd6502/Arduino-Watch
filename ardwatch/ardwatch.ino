@@ -13,6 +13,16 @@ Arduino-based watch!
  
  void recheckConnection(uint8_t, uint8_t);
  MeetAndroid meetAndroid(recheckConnection);
+ void setArdTime(byte flag, byte numOfValues);
+ void setText(byte flag, byte numOfValues);
+ void handleBluetoothInit();
+ void handleClockTasks();
+ void wakeClock();
+ void connectBluetooth();
+ void sleepClock();
+ void setupBluetoothConnection();
+ void checkBluetoothReply();
+ void sendBlueToothCommand(char command[]);
  
  static const unsigned long BLANK_INTERVAL_MS = 10000;
  static const unsigned long BUZZ_INTERVAL_MS = 500;
@@ -139,9 +149,7 @@ void setText(byte flag, byte numOfValues) {
   // wake up so the user sees the text message
   if (blankCounter == 0) {
     wakeClock();
-  } else {
-    meetAndroid.send(blankCounter);
-  }
+  } 
   blankCounter = millis();
   buzzCounter = millis();
   digitalWrite(motor_l, HIGH);
@@ -219,7 +227,7 @@ void handleClockTasks() {
     SeeedOled.putString(tbuf);
     
     SeeedOled.setTextXY(5,0);
-    snprintf(tbuf, 16, "%02d/%02d/%04d %.3s", month(), day(), year(), dayShortStr(day()));
+    snprintf(tbuf, 16, "%02d/%02d/%04d %.3s", month(), day(), year(), dayShortStr(weekday()));
     SeeedOled.putString(tbuf);
         
     wdt_reset();
@@ -265,6 +273,7 @@ void sleepClock() {
   sei();
   sleep_enable();
   while (/* int0_awake == 0 && */pcint2_awake == 0) {
+    delayMicroseconds(32);
     sleep_cpu();
   }
   sleep_disable();
@@ -434,6 +443,9 @@ ISR(PCINT2_vect) {
 //  if (!digitalRead(button)) {
 //    int0_awake = 1;
 //  }
+}
+
+ISR(BADISR_vect) {
 }
 
 #if 0
