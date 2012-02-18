@@ -26,11 +26,13 @@ Arduino-based watch!
  
  static const unsigned long BLANK_INTERVAL_MS = 10000;
  static const unsigned long BUZZ_INTERVAL_MS = 500;
+ static const unsigned long COMM_INTERVAL_MS = 150;
  //static const time_t TEMP_INTERVAL_S = 60;
  //static const time_t BUTTON_TIME_MS = 2000;
  static unsigned long blankCounter;
  //static unsigned long buttonCounter = 0;
  static unsigned long buzzCounter;
+ static unsigned long commCounter;
  //static volatile uint8_t int0_awake = 0;
  static volatile uint8_t pcint2_awake;
  
@@ -92,8 +94,6 @@ void setup()
   //meetAndroid.registerFunction(sendBattery, 'b');
   //meetAndroid.registerFunction(recheckConnection, '+');
 
-  blankCounter = 0;
-  
   // enable pullup on the wake button so we can read it
   pinMode(button, INPUT);
   digitalWrite(button, HIGH);
@@ -212,12 +212,12 @@ void handleClockTasks() {
   }
   
   // If we're awake, see if it's time to sleep
-  if (millis() - blankCounter >= BLANK_INTERVAL_MS) {
+  if (millis() - blankCounter >= BLANK_INTERVAL_MS && millis() - commCounter >= COMM_INTERVAL_MS) {
     sleepClock();
   }
   
   // If we're awake, display the time
-  static time_t last_display = 0;
+  static time_t last_display;
   if (blankCounter && last_display != now()) {
     char tbuf[32];
     last_display = now();
@@ -256,13 +256,7 @@ void sleepClock() {
   
   blankCounter = 0;
   buzzCounter = 0;
-  
-//    #define SLEEP_MODE_IDLE         (0)
-//    #define SLEEP_MODE_ADC          _BV(SM0)
-//    #define SLEEP_MODE_PWR_DOWN     _BV(SM1)
-//    #define SLEEP_MODE_PWR_SAVE     (_BV(SM0) | _BV(SM1))
-//    #define SLEEP_MODE_STANDBY      (_BV(SM1) | _BV(SM2))
-//    #define SLEEP_MODE_EXT_STANDBY  (_BV(SM0) | _BV(SM1) | _BV(SM2))
+  commCounter = 0;
   
   cli();
   PCIFR |= _BV(PCIF2);
@@ -272,11 +266,16 @@ void sleepClock() {
   set_sleep_mode(SLEEP_MODE_PWR_SAVE);
   sei();
   sleep_enable();
-  while (/* int0_awake == 0 && */pcint2_awake == 0) {
+  while (pcint2_awake == 0) {
     delayMicroseconds(32);
     sleep_cpu();
   }
   sleep_disable();
+  if (digitalRead(button) == HIGH) {
+    // if we woke because of the serial port, come out of sleep mode
+    // but don't wake the display
+    commCounter = millis();
+  }
   
   PCICR &= ~_BV(PCIE2);
 }
@@ -401,7 +400,7 @@ void checkBluetoothReply() {
   }
 }
 
-static int btStep = 0;
+static int btStep;
 void setupBluetoothConnection()
 {
   SeeedOled.putNumber(btStep);
